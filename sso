@@ -1,0 +1,461 @@
+1.工具类
+1)CookieUtil工具类
+在创建单点登录系统时,又有要将代表登入状态的凭证设置到cookie中,所以创建关于cookie的工具类,在工具类中定义,设置cookie,获取指定cookie,删除指定cookie的方法
+2)UUIDUtil工具类
+当登入成功时,需要创建一个凭证,将这个凭证作为key添加到redis中,为了防止这个凭证的重复,使用uuid工具类生产一个字符串,并将这个字符串中的”-”使用空格替换,作为凭证
+3)MD5Util
+在登入时,需要查询用户信息,用户密码,由于密码在添加时是加密的,在请求登入时比对密码,获取的登入密码要加密后再与数据库中的密码进行比较
+4)JsonUtil
+在向redis中添加数据时,redis中一般存储的是字符串,与byte字节数据, 为了方便查看,一般会将对象参数转换为json格式字符串,再向redis中添加,所以在获取redis中的数据时,获取到的是json字符串,添加与获取时都要进行相对于的转换
+2.创建sso单点登入服务项目
+1)创建sso-parent父项目容器,pom文件中添加依赖
+注意添加设置,容器下的子项目中需要的依赖,与读取配置文件的路径,格式
+<!-- build 标签 常用于添加插件及编译配置 -->
+<build>
+    <!-- 读取配置文件 -->
+    <resources>
+        <resource>
+            <directory>src/main/resources</directory>
+        </resource>
+        <resource>
+            <directory>src/main/java</directory>
+            <includes>
+                <include>**/*.xml</include>
+                <include>**/*.properties</include>
+                <include>**/*.tld</include>
+            </includes>
+            <filtering>false</filtering>
+        </resource>
+    </resources>
+</build>
+
+2)创建sso-pojo存放对象模型的jar子项目(关于用户信息的表的对应java类)
+3)创建sso-mapper的 jar子项目(操作数据库关于用户信息mapper.xml,与映射接口)
+Pom文件中引入依赖
+<dependencies>
+    <dependency>
+        <groupId>com.ego</groupId>
+        <artifactId>ego-sso-pojo</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </dependency>
+
+    <!-- mybatis 依赖 -->
+    <dependency>
+        <groupId>org.mybatis</groupId>
+        <artifactId>mybatis</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.mybatis</groupId>
+        <artifactId>mybatis-spring</artifactId>
+    </dependency>
+    <!-- mysql 依赖 -->
+    <dependency>
+        <groupId>mysql</groupId>
+        <artifactId>mysql-connector-java</artifactId>
+    </dependency>
+    <!-- druid 连接池 -->
+    <dependency>
+        <groupId>com.alibaba</groupId>
+        <artifactId>druid</artifactId>
+    </dependency>
+    <!-- 分页工具 -->
+    <dependency>
+        <groupId>com.github.pagehelper</groupId>
+        <artifactId>pagehelper</artifactId>
+    </dependency>
+</dependencies>
+
+
+4)创建sso-service 暴露服务的接口的jar子项目(由于是服务,存放服务暴露的接口)
+Pom文件中引入的依赖
+<dependencies>
+    <dependency>
+        <groupId>com.ego</groupId>
+        <artifactId>ego-sso-mapper</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </dependency>
+
+    <!-- spring 依赖 -->
+    <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-context</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-webmvc</artifactId>
+    </dependency>
+    <!-- 日志打印 -->
+    <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-log4j12</artifactId>
+    </dependency>
+    <!-- dubbo 依赖 -->
+    <dependency>
+        <groupId>com.alibaba</groupId>
+        <artifactId>dubbo</artifactId>
+    </dependency>
+    <!-- zookeeper 依赖 -->
+    <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper</artifactId>
+    </dependency>
+    <!-- zkclient 依赖 -->
+    <dependency>
+        <groupId>com.github.sgroschupf</groupId>
+        <artifactId>zkclient</artifactId>
+    </dependency>
+    <!-- Redis 客户端 -->
+    <dependency>
+        <groupId>redis.clients</groupId>
+        <artifactId>jedis</artifactId>
+    </dependency>
+    <!-- spring data redis 依赖 -->
+    <dependency>
+        <groupId>org.springframework.data</groupId>
+        <artifactId>spring-data-redis</artifactId>
+    </dependency>
+</dependencies>
+
+package com.ego.service;
+import com.ego.pojo.Admin;
+public interface SSOServiceI {
+    /*登入验证,返回凭证*/
+    String login(Admin admin);
+    /*传入凭证,验证凭证是否正确,验证用户是否登入,如果登入返回用户对象*/
+    Admin validate(String ticket);
+    /*退出登入*/
+    void logout(String ticket);
+}
+
+5)创建sso-serviceImple对服务接口的具体实现jar子项目
+Pom文件中添加依赖
+<dependencies>
+    <dependency>
+        <groupId>com.ego</groupId>
+        <artifactId>ego-sso-service</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </dependency>
+
+    <!-- spring 依赖 -->
+    <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-aspects</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-jdbc</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-orm</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-webmvc</artifactId>
+    </dependency>
+    <!-- jsp 相关依赖 -->
+    <dependency>
+        <groupId>jstl</groupId>
+        <artifactId>jstl</artifactId>
+    </dependency>
+    <!-- servlet api -->
+    <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>javax.servlet-api</artifactId>
+        <scope>provided</scope>
+    </dependency>
+    <!-- Json 处理相关依赖 -->
+    <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
+    </dependency>
+</dependencies>
+
+package com.ego.service.impl;
+import com.ego.mapper.AdminMapper;
+import com.ego.pojo.Admin;
+import com.ego.pojo.AdminExample;
+import com.ego.service.SSOServiceI;
+import com.ego.util.JsonUtil;
+import com.ego.util.Md5Util;
+import com.ego.util.UUIDUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+
+import java.util.List;
+public class SSOServiceImpl implements SSOServiceI {
+    private static Logger logger= LoggerFactory.getLogger(SSOServiceImpl.class);
+    @Autowired
+    private AdminMapper adminMapper;
+    @Value ("${user.ticket}")
+    private String userTicket;
+    @Autowired
+    private RedisTemplate redisTemplate;
+    @Override
+    public String login(Admin admin) {
+        /*1.参数验证(对传递的对象验证后,获取对象中的数据再次验证)*/
+        if(null==admin){
+            return null;
+        }
+        String userName=admin.getUserName();
+        String password=admin.getPassword();
+        if(null!=userName && userName.length()>0){
+            if(null!=password && password.length()>0){
+                /*创建example对象,添加查询条件,通过用户名查询数据库是否存在这个用户*/
+                AdminExample example=new AdminExample();
+                example.createCriteria().andUserNameEqualTo(userName);
+                List<Admin> admList=adminMapper.selectByExample(example);
+                /*验证是否在数据库中查出了用户名为此的用户,明确,用户名是否可以重复,
+                * 根据是否可以重复,定义验证密码的代码(此处为不可以重复*/
+                if(null!=admList && !admList.isEmpty()){
+                    if(admList.size()>1){
+                        logger.error("根据用户名查询用户时查出多条数据,用户名为:"+userName);
+                        return null;
+                    }else{
+      /*注意思考,当用户非法退出,redis中代表本用户登入的数据未删除时的操作,
+       * 示例1: 设置用户登入后向redis中存储的key是 userTicket+":"+adminId+":"+uuId
+      * 当用户登入请求到达此处,首先根据userTicke+":"+adminId+":"+"*",匹配查询redis中
+      * 是否存在数据,如果存在删除,然后在进行登入添加redis中的操作(原因是uuid为随机的,
+     * 此方式要注意验证用户是否登入等操作时获取redis数据时的key的设计,考虑用户id有没有安全方面的东西)
+    * 示例2: 设置redis存储数据的失效时间,同一个用户登入,不考虑redis中存储的个数,在指定时间内删除*/
+
+
+      /*获取在数据库中查询出的用户信息对象,获取对象中的密码,与前台传递的密码进行比较
+       * 注意数据库中查询出的密码时经过加密后的,在比较时要经过处理后才可以*/
+                       Admin a = admList.get(0);
+/*对前台传递过来的密码进行加密后再与数据库中查询出的密码进行比较(获取a中的Salt数据,根据salt,进行加密*/
+                       String md5Pwd= Md5Util.getMd5WithSalt(password,a.getEcSalt());
+                       if(a.getPassword().equals(md5Pwd)){
+   /*首先查询Redis中是否存在该用户的凭证,如果存在删除,重新添加,(防止用户的错误退出,如直接关闭浏览器)验证成功进行登入设置,通过UUID设置代表登入的凭证*/
+                           String ticket = UUIDUtil.getUUID();
+                     /*对凭证的名字与登入成功后设置的uuid进行拼接处理,设置为一个key,将这个用户对象存入redis数据库中*/
+                           String key=userTicket+":"+ticket;
+                           redisTemplate.opsForValue().set(key, JsonUtil.object2JsonStr(a));
+                           /*将代表登入成功的凭证ticket响应前台*/
+                           return ticket;
+                       }else{
+                           logger.error("用户名或密码错误！");
+                           return null;
+                       }
+                    }
+                }
+            }
+        }
+        logger.error("用户名或密码不能为空！");
+        return null;
+    }
+    /*验证用户是否登入*/
+    @Override
+    public Admin validate(String ticket) {
+        String adminStr= (String) redisTemplate.opsForValue().get(userTicket+":"+ticket);
+        if(null!=adminStr && adminStr.length()>0){
+            /*将查询出的json字符串转换为对象*/
+            Admin admin=JsonUtil.jsonStr2Object(adminStr,Admin.class);
+            return admin;
+        }
+        return null;
+    }
+
+    /**
+     * 安全退出
+     *退出登入时此处删除reids中代表登入的数据,实际项目中
+     * 删除代表登入状态的cookie, session中删除用户名
+     * @param ticket
+     */
+    @Override
+    public void logout(String ticket) {
+        // 删除redis信息
+        redisTemplate.delete(userTicket + ":" + ticket);
+    }
+}
+
+运行服务,将服务注册到注册中心的类
+
+package com.ego.service.dubbo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.support.ClassPathXmlApplicationContext;
+public class SsoRun {
+    private final static Logger logger= LoggerFactory.getLogger(SsoRun.class);
+
+    public static void main(String[]args){
+            /*1.加载spring配置文件*/
+            /*创建配置文件存放路径的字符串*/
+            String config="classpath:spring/applicationContext-*.xml";
+        ClassPathXmlApplicationContext context=new ClassPathXmlApplicationContext(config);
+        /*2.启动*/
+        context.start();
+        /*3,循环防止关闭,(或阻塞式启动*/
+        while (true){
+            try {
+                Thread.sleep(10000);
+                logger.info("Dubbo认证服务运行!");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                logger.error("Dubbo认证服务异常:"+e.getMessage());
+            }
+        }
+    }
+}
+
+6)第5步创建的子项目中添加配置文件
+由于是spring的项目,添加关于spring的配置文件, 由于是服务,添加dubbo的服务注册配置文件(此处只列举一个关于服务的xml,其他的不列举了,一般关于spring的文件都需要)
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+ http://www.springframework.org/schema/beans/spring-beans.xsd
+ http://code.alibabatech.com/schema/dubbo
+ http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+    <!-- 用于计算依赖关系 不能和 consumer 中的 name 相同 -->
+    <dubbo:application name="ego-sso-provider"/>
+    <!-- 指定注册中心 -->
+    <dubbo:registry protocol="zookeeper" address="${zookeeper.address}"/>
+    <!-- 暴露服务端口 payload 用于指定接口之间传输数据的最大值 单位为 Byte -->
+    <dubbo:protocol name="dubbo" port="${dubbo.port}" payload="${dubbo.payload}"/>
+    <!-- 通过 spring 装配 service -->
+    <bean id="ssoService" class="com.ego.service.impl.SSOServiceImpl"></bean>
+    <!--向外暴露的接口-->
+    <dubbo:service interface="com.ego.service.SSOServiceI" ref="ssoService"/>
+
+</beans>
+
+添加对应需要的properties文件,注意存入redis时的key的proper文件,在向redis中存储数据时的key是properties文件中定义的加上uuid拼接而成的
+# redis用户票据key
+user.ticket=userTicket
+
+3.需要登入的系统定义
+1)拦截器,第38个文档中有
+2)设置代表登入状态的cookie时,cookie的名字的.properties文件(获取服务的dubbo.xml)
+# redis用户票据key
+user.ticket=userTicket
+
+3)获取,设置,删除cookie的service层
+package com.ego.service.impl;
+import com.ego.service.CookieServiceI;
+import com.ego.util.CookieUtil;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+@Service
+public class CookieServiceImpl implements CookieServiceI {
+
+    @Value("${user.ticket}")
+    private String userTicket;
+
+    /**
+     * 设置cookie
+     * @param request
+     * @param response
+     * @param cookieValue 单点登录系统返回的票据
+     * @return
+     */
+    @Override
+    public boolean setCookie(HttpServletRequest request, HttpServletResponse response, String cookieValue) {
+        CookieUtil.setCookie(request, response, userTicket, cookieValue);
+        return true;
+    }
+
+    /**
+     * 获取cookie
+     * @param request
+     * @return
+     */
+    @Override
+    public String getCookie(HttpServletRequest request) {
+        return CookieUtil.getCookieValue(request, userTicket);
+    }
+
+    /**
+     * 清除cookie
+     * @param request
+     * @param response
+     * @return
+     */
+    @Override
+    public boolean clearCookie(HttpServletRequest request, HttpServletResponse response) {
+        CookieUtil.deleteCookie(request, response, userTicket);
+        return true;
+    }
+}
+
+
+4)用户登入, 退出登入的controller层
+package com.ego.controller;
+
+import com.ego.pojo.Admin;
+import com.ego.result.BaseResult;
+import com.ego.result.BaseResultEnum;
+import com.ego.service.CookieServiceI;
+import com.ego.service.SSOServiceI;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+ // 用户controller
+@Controller
+@RequestMapping("/user")
+public class UserController {
+    @Autowired
+    private SSOServiceI ssoService;
+    @Autowired
+    private CookieServiceI cookieService;
+      //用户登录
+    @RequestMapping("/login")
+    @ResponseBody
+    public BaseResult userLogin(HttpServletRequest request, HttpServletResponse response,Admin admin, String vertify) {
+        // 获取验证码
+    String capText = (String) request.getSession().getAttribute("pictureVerifyKey");
+        // 判断用户输入的验证码是否正确
+        if (!(null != vertify && vertify.trim().length() > 0 && capText.equals(vertify))) {
+            BaseResult result = BaseResult.error();
+            result.setCode(BaseResultEnum.PASS_ERROR_03.getCode());
+            result.setMessage(BaseResultEnum.PASS_ERROR_03.getMessage());
+            return result;
+        }
+        // 用户登录
+        String ticket = ssoService.login(admin);
+        // 票据是否生成成功
+        if (null != ticket && ticket.length() > 0) {
+            // 添加至cookie
+            boolean result = cookieService.setCookie(request, response, ticket);
+            return BaseResult.success();
+        }
+        // 用户名或密码错误
+        BaseResult result = BaseResult.error();
+        result.setCode(BaseResultEnum.PASS_ERROR_04.getCode());
+        result.setMessage(BaseResultEnum.PASS_ERROR_04.getMessage());
+        return result;
+    }
+      //安全退出
+    @RequestMapping("/logout")
+    public String userLogout(HttpServletRequest request, HttpServletResponse response) {
+        // 获取cookie
+        String ticket = cookieService.getCookie(request);
+        // 清除cookie
+        cookieService.clearCookie(request, response);
+        // 清除session
+        request.getSession().removeAttribute("userTicket");
+        // 清除redis
+        ssoService.logout(ticket);
+        // 跳转登录页面
+        return "login";
+    }
+}
+
